@@ -11,15 +11,16 @@ class MoviesApiMixin:
     model = Movie
     http_method_names = ['get']
     queryset = Movie.objects.prefetch_related('genres', 'persons').annotate(
-        arr=ArrayAgg('movieperson__role', ordering='persons')).order_by('creation_date')
+        rol=ArrayAgg('movieperson__role', ordering='persons')).annotate(
+        gen=ArrayAgg('genres__name', distinct=True)).order_by('creation_date')
 
     @staticmethod
     def get_serialize_object(obj):
         """Формируем фильм с полями которые нужны для выдачи"""
 
-        genres = [genre.name for genre in obj.genres.all()]
+        genres = obj.gen
+        roles = obj.rol
         actors, writers, directors = [], [], []
-        roles = obj.arr
         persons = [' '.join((person.firstname, person.lastname)).strip() for person in obj.persons.all()]
         persons_role = list(zip(persons, roles))
 
@@ -51,6 +52,10 @@ class MoviesListApi(MoviesApiMixin, BaseListView):
     paginate_by = 50
 
     def get_context_data(self, *, object_list=None, **kwargs):
+        genre = self.request.GET.get('genre', '')
+        title = self.request.GET.get('title', '')
+        self.queryset = self.queryset.filter(gen__icontains=genre, title__icontains=title)
+
         paginator, page, query, is_paginated = self.paginate_queryset(self.queryset, self.paginate_by)
         results = []
 
@@ -65,7 +70,6 @@ class MoviesListApi(MoviesApiMixin, BaseListView):
             "next": page.next_page_number() if page.has_next() else None,
             'results': results,
         }
-
         return context
 
 
